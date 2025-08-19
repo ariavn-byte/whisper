@@ -568,13 +568,6 @@ def cli():
 
     args = parser.parse_args().__dict__
     model_name: str = args.pop("model")
-
-    if model_name == "turbo" and args["task"] == "translate":
-        warnings.warn(
-            "The 'turbo' model is not trained for translation tasks. "
-            "For best results, please use one of the multilingual models "
-            "('tiny', 'base', 'small', 'medium', 'large') with the --task translate option."
-        )
     model_dir: str = args.pop("model_dir")
     output_dir: str = args.pop("output_dir")
     output_format: str = args.pop("output_format")

@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont
 
+from farsi_transcriber.models.whisper_transcriber import FarsiTranscriber
+
 
 class TranscriptionWorker(QThread):
     """Worker thread for transcription to prevent UI freezing"""
@@ -35,22 +37,33 @@ class TranscriptionWorker(QThread):
         super().__init__()
         self.file_path = file_path
         self.model_name = model_name
+        self.transcriber = None
 
     def run(self):
         """Run transcription in background thread"""
         try:
-            # TODO: Import and use Whisper model
-            # This will be implemented in Phase 3
+            # Initialize Whisper transcriber
             self.progress_update.emit("Loading Whisper model...")
-            self.progress_update.emit(f"Transcribing: {Path(self.file_path).name}")
-            self.progress_update.emit("Transcription complete!")
+            self.transcriber = FarsiTranscriber(model_name=self.model_name)
 
-            # Placeholder result structure (will be replaced with real data in Phase 3)
-            result = {
-                "text": "نتایج تجزیه و تحلیل صوتی اینجا نمایش داده خواهند شد",
-                "segments": [],
-            }
-            self.transcription_complete.emit(result)
+            # Perform transcription
+            self.progress_update.emit(f"Transcribing: {Path(self.file_path).name}")
+            result = self.transcriber.transcribe(self.file_path)
+
+            # Format result for display with timestamps
+            display_text = self.transcriber.format_result_for_display(result)
+
+            # Add full text for export
+            result["full_text"] = result.get("text", "")
+
+            self.progress_update.emit("Transcription complete!")
+            self.transcription_complete.emit(
+                {
+                    "text": display_text,
+                    "segments": result.get("segments", []),
+                    "full_text": result.get("text", ""),
+                }
+            )
 
         except Exception as e:
             self.error_occurred.emit(f"Error: {str(e)}")
@@ -70,6 +83,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.selected_file = None
         self.transcription_worker = None
+        self.last_result = None
         self.init_ui()
 
     def init_ui(self):

@@ -24,6 +24,7 @@ from PyQt6.QtGui import QFont
 
 from farsi_transcriber.models.whisper_transcriber import FarsiTranscriber
 from farsi_transcriber.utils.export import TranscriptionExporter
+from farsi_transcriber.ui.styles import get_stylesheet, get_color
 
 
 class TranscriptionWorker(QThread):
@@ -85,6 +86,8 @@ class MainWindow(QMainWindow):
         self.selected_file = None
         self.transcription_worker = None
         self.last_result = None
+        # Apply stylesheet
+        self.setStyleSheet(get_stylesheet())
         self.init_ui()
 
     def init_ui(self):
@@ -121,10 +124,6 @@ class MainWindow(QMainWindow):
 
         # Transcribe button
         self.transcribe_button = QPushButton("Transcribe")
-        self.transcribe_button.setStyleSheet(
-            "background-color: #4CAF50; color: white; font-weight: bold; "
-            "padding: 8px; border-radius: 4px; font-size: 12pt;"
-        )
         self.transcribe_button.clicked.connect(self.on_transcribe)
         self.transcribe_button.setEnabled(False)
         main_layout.addWidget(self.transcribe_button)
@@ -152,9 +151,9 @@ class MainWindow(QMainWindow):
         self.results_text.setPlaceholderText(
             "Transcription results will appear here..."
         )
-        self.results_text.setStyleSheet(
-            "border: 1px solid #ccc; border-radius: 4px; font-family: 'Courier New';"
-        )
+        # Set monospace font for results
+        mono_font = QFont("Courier New", 10)
+        self.results_text.setFont(mono_font)
         main_layout.addWidget(self.results_text)
 
         # Buttons layout (Export, Clear)

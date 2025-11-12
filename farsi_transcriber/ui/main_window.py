@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 
 from farsi_transcriber.models.whisper_transcriber import FarsiTranscriber
+from farsi_transcriber.utils.export import TranscriptionExporter
 
 
 class TranscriptionWorker(QThread):
@@ -239,24 +240,35 @@ class MainWindow(QMainWindow):
 
     def on_export(self):
         """Handle export button click"""
-        if not hasattr(self, "last_result"):
+        if not self.last_result:
             QMessageBox.warning(self, "Warning", "No transcription to export.")
             return
 
-        file_path, file_format = QFileDialog.getSaveFileName(
+        file_path, file_filter = QFileDialog.getSaveFileName(
             self,
             "Export Transcription",
             "",
-            "Text Files (*.txt);;SRT Files (*.srt);;JSON Files (*.json)",
+            "Text Files (*.txt);;SRT Subtitles (*.srt);;WebVTT Subtitles (*.vtt);;JSON (*.json);;TSV (*.tsv)",
         )
 
         if file_path:
             try:
-                # TODO: Implement export logic in Phase 4
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(self.results_text.toPlainText())
+                file_path = Path(file_path)
+
+                # Determine format from file extension
+                suffix = file_path.suffix.lower().lstrip(".")
+                if not suffix:
+                    # Default to txt if no extension
+                    suffix = "txt"
+                    file_path = file_path.with_suffix(".txt")
+
+                # Export using the appropriate format
+                TranscriptionExporter.export(self.last_result, file_path, suffix)
+
                 QMessageBox.information(
-                    self, "Success", f"Results exported to {Path(file_path).name}"
+                    self,
+                    "Success",
+                    f"Transcription exported successfully to:\n{file_path.name}",
                 )
             except Exception as e:
                 QMessageBox.critical(

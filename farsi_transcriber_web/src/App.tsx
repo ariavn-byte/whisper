@@ -158,7 +158,7 @@ export default function App() {
     if (!query) return text;
 
     const parts = text.split(new RegExp(`(${query})`, 'gi'));
-    return parts.map((part, i) =>
+    return parts.map((part) =>
       part.toLowerCase() === query.toLowerCase()
         ? `<mark style="background-color: ${isDark ? '#4CAF50' : '#FFEB3B'}; color: ${isDark ? '#000' : '#000'}; padding: 2px 4px; border-radius: 2px;">${part}</mark>`
         : part
@@ -184,7 +184,7 @@ export default function App() {
 
       <Resizable
         size={windowSize}
-        onResizeStop={(e, direction, ref, d) => {
+        onResizeStop={(_e, _direction, _ref, d) => {
           setWindowSize({
             width: windowSize.width + d.width,
             height: windowSize.height + d.height,
@@ -350,7 +350,10 @@ export default function App() {
                       }}
                     />
                   </div>
-                  <Select value={exportFormat} onValueChange={setExportFormat}>
+                  <Select 
+                    value={exportFormat} 
+                    onChange={(e) => setExportFormat(e.target.value as 'txt' | 'docx' | 'pdf' | 'srt')}
+                  >
                     <option value="txt">TXT</option>
                     <option value="docx">DOCX</option>
                     <option value="pdf">PDF</option>

@@ -32,3 +32,6 @@ Thumbs.db
 
 # Build output
 *.tgz
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

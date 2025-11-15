@@ -4,3 +4,4 @@ python-dotenv==1.0.0
 openai-whisper==20230314
 torch>=1.10.1
 python-multipart==0.0.6
+gunicorn==21.2.0

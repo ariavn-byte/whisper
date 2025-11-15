@@ -2,10 +2,12 @@
 Farsi Transcriber Backend API
 
 Flask API for handling audio/video file transcription using Whisper model.
+Configured for Railway deployment.
 """
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from werkzeug.utils import secure_filename
 import whisper
@@ -16,24 +18,33 @@ from flask_cors import CORS
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Configuration
-UPLOAD_FOLDER = '/tmp/farsi_transcriber_uploads'
+UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXTENSIONS = {'mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac', 'wma', 'mp4', 'mkv', 'mov', 'webm', 'avi', 'flv', 'wmv'}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Production settings
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
 
-# Load Whisper model
-try:
-    model = whisper.load_model('medium')
-    print("✓ Whisper model loaded successfully")
-except Exception as e:
-    print(f"✗ Error loading Whisper model: {e}")
-    model = None
+# Load Whisper model (lazy load for faster startup)
+model = None
+
+def load_model():
+    """Lazy load Whisper model on first use"""
+    global model
+    if model is None:
+        try:
+            print("Loading Whisper model...")
+            model = whisper.load_model('medium')
+            print("✓ Whisper model loaded successfully")
+        except Exception as e:
+            print(f"✗ Error loading Whisper model: {e}")
+            model = None
+    return model
 
 
 def allowed_file(filename):
@@ -41,13 +52,24 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint"""
+    return jsonify({
+        'message': 'Farsi Transcriber API',
+        'version': '1.0.0',
+        'status': 'running'
+    })
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
+    model_status = load_model()
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model is not None,
-        'device': 'cuda' if model else 'N/A'
+        'model_loaded': model_status is not None,
+        'environment': app.config['ENV']
     })
 
 
@@ -64,9 +86,10 @@ def transcribe():
     - transcription results with segments and timestamps
     """
     try:
-        # Check if model is loaded
-        if not model:
-            return jsonify({'error': 'Whisper model not loaded'}), 500
+        # Load model if not already loaded
+        whisper_model = load_model()
+        if not whisper_model:
+            return jsonify({'error': 'Failed to load Whisper model'}), 500
 
         # Check if file is in request
         if 'file' not in request.files:
@@ -89,7 +112,7 @@ def transcribe():
         language = request.form.get('language', 'fa')
 
         # Transcribe
-        result = model.transcribe(filepath, language=language, verbose=False)
+        result = whisper_model.transcribe(filepath, language=language, verbose=False)
 
         # Format response
         segments = []
@@ -196,4 +219,6 @@ def _format_vtt(segments):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('FLASK_ENV', 'production') == 'development'
+    app.run(debug=debug, host='0.0.0.0', port=port, threaded=True)

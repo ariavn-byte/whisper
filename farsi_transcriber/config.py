@@ -4,7 +4,6 @@ Configuration settings for Farsi Transcriber application
 Manages model selection, device settings, and other configuration options.
 """
 
-import os
 from pathlib import Path
 
 # Application metadata

@@ -4,7 +4,6 @@ Whisper Transcriber Module
 Handles Farsi audio/video transcription using OpenAI's Whisper model.
 """
 
-import os
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -53,7 +52,7 @@ class FarsiTranscriber:
             warnings.simplefilter("ignore")
             self.model = whisper.load_model(model_name, device=self.device)
 
-        print(f"Model loaded successfully")
+        print("Model loaded successfully")
 
     def transcribe(
         self,

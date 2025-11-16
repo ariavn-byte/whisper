@@ -2,7 +2,7 @@
 Farsi Transcriber Backend API
 
 Flask API for handling audio/video file transcription using Whisper model.
-Configured for Railway deployment.
+Configured for Railway deployment with lazy model loading.
 """
 
 import os
@@ -10,9 +10,11 @@ import sys
 import tempfile
 from pathlib import Path
 from werkzeug.utils import secure_filename
-import whisper
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# Prevent model download during build
+os.environ['WHISPER_CACHE'] = os.path.expanduser('~/.cache/whisper')
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -30,15 +32,18 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
 
-# Load Whisper model (lazy load for faster startup)
+# Load Whisper model (lazy load - only on first transcription request)
 model = None
 
 def load_model():
-    """Lazy load Whisper model on first use"""
+    """Lazy load Whisper model on first use (not during build)"""
     global model
     if model is None:
         try:
-            print("Loading Whisper model...")
+            print("⏳ Loading Whisper model for first time...")
+            print("   This may take 1-2 minutes on first run...")
+            # Import here to avoid loading during build
+            import whisper
             model = whisper.load_model('medium')
             print("✓ Whisper model loaded successfully")
         except Exception as e:

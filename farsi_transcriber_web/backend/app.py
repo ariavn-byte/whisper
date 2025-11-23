@@ -69,11 +69,10 @@ def index():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
-    model_status = load_model()
+    """Health check endpoint - fast response without loading model"""
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model_status is not None,
+        'model_loaded': model is not None,
         'environment': app.config['ENV']
     })
 

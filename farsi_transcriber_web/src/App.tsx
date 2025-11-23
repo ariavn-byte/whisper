@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   FileAudio,
   Upload,
@@ -25,6 +25,8 @@ interface FileItem {
   status: 'pending' | 'processing' | 'completed' | 'error';
   progress?: number;
   transcription?: TranscriptionSegment[];
+  file?: File;
+  fullText?: string;
 }
 
 interface TranscriptionSegment {
@@ -33,6 +35,9 @@ interface TranscriptionSegment {
   text: string;
 }
 
+// Get API URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function App() {
   const [fileQueue, setFileQueue] = useState<FileItem[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
@@ -40,6 +45,7 @@ export default function App() {
   const [windowSize, setWindowSize] = useState({ width: 1100, height: 700 });
   const [searchQuery, setSearchQuery] = useState('');
   const [exportFormat, setExportFormat] = useState('txt');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Theme colors
   const theme = {
@@ -56,18 +62,35 @@ export default function App() {
   };
 
   const handleAddFiles = () => {
-    // Simulated file addition for now
-    // TODO: Implement real file picker
-    const newFile: FileItem = {
-      id: Date.now().toString(),
-      name: `recording_${fileQueue.length + 1}.mp3`,
-      status: 'pending',
-    };
-    setFileQueue([...fileQueue, newFile]);
-    if (!selectedFileId) {
-      setSelectedFileId(newFile.id);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.currentTarget.files;
+    if (!files) return;
+
+    const newFiles: FileItem[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const newFileItem: FileItem = {
+        id: `${Date.now()}-${i}`,
+        name: file.name,
+        status: 'pending',
+        file: file,
+      };
+      newFiles.push(newFileItem);
     }
-    toast.success('File added to queue');
+
+    setFileQueue([...fileQueue, ...newFiles]);
+    if (!selectedFileId && newFiles.length > 0) {
+      setSelectedFileId(newFiles[0].id);
+    }
+    toast.success(`${newFiles.length} file(s) added to queue`);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleRemoveFile = (id: string) => {
@@ -82,7 +105,7 @@ export default function App() {
     if (!selectedFileId) return;
 
     const fileIndex = fileQueue.findIndex(f => f.id === selectedFileId);
-    if (fileIndex === -1) return;
+    if (fileIndex === -1 || !fileQueue[fileIndex].file) return;
 
     // Update status to processing
     const updatedQueue = [...fileQueue];
@@ -91,33 +114,45 @@ export default function App() {
     setFileQueue(updatedQueue);
 
     try {
-      // TODO: Call real Whisper API
-      // Simulate progress for now
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        const updated = [...fileQueue];
-        updated[fileIndex].progress = progress;
+      const file = fileQueue[fileIndex].file!;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('language', 'fa'); // Farsi by default
 
-        if (progress >= 100) {
-          clearInterval(interval);
-          updated[fileIndex].status = 'completed';
-          updated[fileIndex].transcription = [
-            { start: '00:00:00.000', end: '00:00:05.500', text: 'سلام دنیا، این یک تست است' },
-            { start: '00:00:05.500', end: '00:00:10.200', text: 'خوش آمدید به برنامه تجزیه صوت' },
-            { start: '00:00:10.200', end: '00:00:15.800', text: 'این برنامه با استفاده از مدل ویسپر کار می‌کند' },
-            { start: '00:00:15.800', end: '00:00:22.300', text: 'شما می‌توانید فایل‌های صوتی و تصویری خود را به متن تبدیل کنید' },
-            { start: '00:00:22.300', end: '00:00:28.100', text: 'این ابزار برای تحقیقات علمی و سخنرانی‌ها مفید است' },
-          ];
-          toast.success('Transcription completed!');
-        }
+      // Show loading toast
+      const loadingToastId = toast.loading('Loading Whisper model (first time only)...');
+
+      const response = await fetch(`${API_URL}/transcribe`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Dismiss loading toast
+      toast.dismiss(loadingToastId);
+
+      if (result.status === 'success') {
+        const updated = [...fileQueue];
+        updated[fileIndex].status = 'completed';
+        updated[fileIndex].progress = 100;
+        updated[fileIndex].transcription = result.segments;
+        updated[fileIndex].fullText = result.text;
         setFileQueue(updated);
-      }, 300);
+        toast.success('Transcription completed!');
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
     } catch (error) {
       const updated = [...fileQueue];
       updated[fileIndex].status = 'error';
       setFileQueue(updated);
-      toast.error('Failed to transcribe file');
+      const errorMsg = error instanceof Error ? error.message : 'Failed to transcribe file';
+      toast.error(errorMsg);
     }
   };
 
@@ -126,13 +161,53 @@ export default function App() {
     toast.success('Copied to clipboard');
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const selectedFile = fileQueue.find(f => f.id === selectedFileId);
-    if (selectedFile?.transcription) {
-      // TODO: Implement real export
-      toast.success(`Exporting as ${exportFormat.toUpperCase()}...`);
-    } else {
+    if (!selectedFile?.transcription || !selectedFile.fullText) {
       toast.error('No transcription to export');
+      return;
+    }
+
+    try {
+      const toastId = toast.loading('Preparing export...');
+
+      const response = await fetch(`${API_URL}/export`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transcription: selectedFile.fullText,
+          segments: selectedFile.transcription,
+          format: exportFormat,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      toast.dismiss(toastId);
+
+      if (result.status === 'success') {
+        // Create a blob and download
+        const blob = new Blob([result.content], { type: result.mime_type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedFile.name.split('.')[0]}.${exportFormat === 'json' ? 'json' : exportFormat}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast.success(`Exported as ${exportFormat.toUpperCase()}`);
+      } else {
+        throw new Error(result.error || 'Export failed');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to export';
+      toast.error(errorMsg);
     }
   };
 
@@ -181,6 +256,16 @@ export default function App() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: theme.bg }}>
       <Toaster theme={isDark ? 'dark' : 'light'} position="top-right" />
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="audio/*,video/*"
+        onChange={handleFileInputChange}
+        style={{ display: 'none' }}
+      />
 
       <Resizable
         size={windowSize}
@@ -350,14 +435,14 @@ export default function App() {
                       }}
                     />
                   </div>
-                  <Select 
-                    value={exportFormat} 
-                    onChange={(e) => setExportFormat(e.target.value as 'txt' | 'docx' | 'pdf' | 'srt')}
+                  <Select
+                    value={exportFormat}
+                    onChange={(e) => setExportFormat(e.target.value as 'txt' | 'srt' | 'vtt' | 'json')}
                   >
                     <option value="txt">TXT</option>
-                    <option value="docx">DOCX</option>
-                    <option value="pdf">PDF</option>
                     <option value="srt">SRT</option>
+                    <option value="vtt">VTT</option>
+                    <option value="json">JSON</option>
                   </Select>
                   <Button
                     onClick={handleExport}

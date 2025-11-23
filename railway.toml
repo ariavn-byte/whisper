@@ -1,0 +1,26 @@
+# Railway configuration for both backend and frontend services
+# https://docs.railway.app/reference/nixpacks
+
+[build]
+builder = "nixpacks"
+
+# Backend service configuration
+[[services]]
+name = "backend"
+root = "farsi_transcriber_web/backend"
+
+[services.build]
+nixPkgs = ["ffmpeg"]
+
+[services.build.nixPackages]
+pythonPackages = ["pip"]
+
+[services.start]
+cmd = "gunicorn --workers 2 --worker-class sync --timeout 120 --bind 0.0.0.0:$PORT app:app"
+
+# Frontend service configuration
+[[services]]
+name = "frontend"
+root = "farsi_transcriber_web"
+buildCommand = "npm install && npm run build"
+startCommand = "npm run preview"
